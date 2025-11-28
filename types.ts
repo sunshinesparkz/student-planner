@@ -29,4 +29,5 @@ export interface ColorOption {
 export interface User {
   username: string;
   lastLogin?: string;
+  analysis?: string; // ผลการวิเคราะห์หรือ Note เพิ่มเติม
 }

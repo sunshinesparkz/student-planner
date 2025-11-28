@@ -9,9 +9,7 @@ import {
   isSameMonth, 
   isSameDay, 
   addMonths, 
-  subMonths, 
-  isToday,
-  parseISO
+  isToday
 } from 'date-fns';
 import { th } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
@@ -50,7 +48,12 @@ const CalendarGrid: React.FC<CalendarGridProps> = ({
   const weekDays = ['อา.', 'จ.', 'อ.', 'พ.', 'พฤ.', 'ศ.', 'ส.'];
 
   const getEventsForDay = (day: Date) => {
-    return events.filter(event => isSameDay(parseISO(event.date), day));
+    return events.filter(event => {
+      // Manual parsing to avoid parseISO issues
+      const [y, m, d] = event.date.split('-').map(Number);
+      const eventDate = new Date(y, m - 1, d);
+      return isSameDay(eventDate, day);
+    });
   };
 
   return (

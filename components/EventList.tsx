@@ -2,7 +2,7 @@ import React from 'react';
 import { CourseEvent } from '../types';
 import { COURSE_COLORS } from '../constants';
 import { Clock, MapPin, Trash2, CalendarX, Paperclip, ExternalLink, FileText, Edit2 } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format } from 'date-fns';
 import { th } from 'date-fns/locale';
 
 interface EventListProps {
@@ -16,7 +16,10 @@ interface EventListProps {
 const EventList: React.FC<EventListProps> = ({ events, selectedDateStr, onDeleteEvent, onEditEvent, onOpenAddForm }) => {
   const sortedEvents = [...events].sort((a, b) => a.startTime.localeCompare(b.startTime));
   
-  const formattedDate = format(parseISO(selectedDateStr), 'd MMMM yyyy', { locale: th });
+  // Manual parsing to avoid parseISO import issues and ensure local time
+  const [year, month, day] = selectedDateStr.split('-').map(Number);
+  const dateObj = new Date(year, month - 1, day);
+  const formattedDate = format(dateObj, 'd MMMM yyyy', { locale: th });
 
   return (
     <div className="h-full flex flex-col">

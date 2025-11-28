@@ -15,11 +15,11 @@ export const storageService = {
         // ค้นหา User จากตาราง users
         const { data, error } = await supabase
           .from('users')
-          .select('*')
+          .select('username, pin, analysis') // Select analysis column
           .eq('username', username)
           .single();
 
-        if (error && error.code !== 'PGRST116') { // PGRST116 คือไม่เจอข้อมูล (ซึ่งเราจะถือว่าเป็นการสมัครใหม่)
+        if (error && error.code !== 'PGRST116') { // PGRST116 คือไม่เจอข้อมูล
              console.error('Supabase Login Error:', error);
              throw new Error('Database Connection Error');
         }
@@ -29,20 +29,23 @@ export const storageService = {
           if (data.pin !== pin) {
             throw new Error('รหัสผ่าน (PIN) ไม่ถูกต้อง');
           }
-          return { username, lastLogin: new Date().toISOString() };
+          return { 
+            username, 
+            lastLogin: new Date().toISOString(),
+            analysis: data.analysis || '' 
+          };
         } else {
           // ไม่เคยมี User นี้ -> สมัครใหม่
           const { error: insertError } = await supabase
             .from('users')
-            .insert([{ username, pin, events: [] }]);
+            .insert([{ username, pin, events: [], analysis: '' }]);
           
           if (insertError) throw insertError;
-          return { username, lastLogin: new Date().toISOString() };
+          return { username, lastLogin: new Date().toISOString(), analysis: '' };
         }
       } catch (err: any) {
-        // ถ้าเชื่อมต่อ Supabase ไม่ได้ หรือมีปัญหาอื่นๆ
         console.warn('Falling back to local storage due to error:', err);
-        if (err.message.includes('PIN')) throw err; // ถ้าผิดที่ PIN ให้โยน Error ออกไป
+        if (err.message.includes('PIN')) throw err;
       }
     }
 
@@ -50,6 +53,8 @@ export const storageService = {
     console.log('Using LocalStorage for Auth');
     const authKey = `planner_auth_${username}`;
     const storedPin = localStorage.getItem(authKey);
+    const analysisKey = `planner_analysis_${username}`;
+    const storedAnalysis = localStorage.getItem(analysisKey) || '';
 
     if (storedPin) {
       if (storedPin !== pin) throw new Error('รหัสผ่าน (PIN) ไม่ถูกต้อง (Local)');
@@ -57,7 +62,11 @@ export const storageService = {
       localStorage.setItem(authKey, pin);
     }
 
-    return { username, lastLogin: new Date().toISOString() };
+    return { 
+      username, 
+      lastLogin: new Date().toISOString(),
+      analysis: storedAnalysis
+    };
   },
 
   // --- Load Data ---
@@ -85,21 +94,36 @@ export const storageService = {
 
   // --- Save Data ---
   async saveEvents(username: string, events: CourseEvent[]): Promise<void> {
-    // 1. บันทึก LocalStorage เสมอ (เพื่อความเร็วและกันเน็ตหลุด)
+    // 1. บันทึก LocalStorage เสมอ
     const storageKey = `planner_data_${username}`;
     localStorage.setItem(storageKey, JSON.stringify(events));
 
     // 2. ถ้ามี Supabase ให้บันทึกขึ้น Cloud ด้วย
     if (supabase) {
-      // ไม่ต้องรอ (Fire and forget) หรือจะรอเพื่อเช็ค Error ก็ได้
       supabase
         .from('users')
         .update({ events: events })
         .eq('username', username)
         .then(({ error }) => {
-          if (error) console.error('Failed to sync to Cloud:', error);
-          else console.log('Synced to Cloud successfully');
+          if (error) console.error('Failed to sync Events to Cloud:', error);
         });
+    }
+  },
+
+  // --- Save Analysis ---
+  async saveAnalysis(username: string, analysis: string): Promise<void> {
+    // 1. Local
+    localStorage.setItem(`planner_analysis_${username}`, analysis);
+
+    // 2. Supabase
+    if (supabase) {
+        const { error } = await supabase
+           .from('users')
+           .update({ analysis: analysis })
+           .eq('username', username);
+        
+        if (error) console.error('Failed to sync Analysis to Cloud:', error);
+        else console.log('Synced Analysis to Cloud successfully');
     }
   }
 };

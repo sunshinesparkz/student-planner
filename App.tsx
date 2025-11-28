@@ -5,7 +5,7 @@ import CalendarGrid from './components/CalendarGrid';
 import EventList from './components/EventList';
 import EventForm from './components/EventForm';
 import LoginForm from './components/LoginForm';
-import { LogOut, Cloud, WifiOff } from 'lucide-react';
+import { LogOut, Cloud, WifiOff, Sparkles, Save } from 'lucide-react';
 import { storageService } from './lib/storage';
 import { supabase } from './lib/supabaseClient';
 
@@ -17,6 +17,7 @@ function App() {
   const [currentDate, setCurrentDate] = useState(new Date()); 
   const [selectedDate, setSelectedDate] = useState(new Date()); 
   const [events, setEvents] = useState<CourseEvent[]>([]);
+  const [analysisText, setAnalysisText] = useState('');
   
   // State for Form visibility and mode
   const [isAddingEvent, setIsAddingEvent] = useState(false);
@@ -26,6 +27,7 @@ function App() {
   
   // New state to prevent overwriting data before it's loaded
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  const [isSavingAnalysis, setIsSavingAnalysis] = useState(false);
   
   // Check if we are in cloud mode
   const isCloudMode = !!supabase;
@@ -39,6 +41,7 @@ function App() {
       try {
         const userData = JSON.parse(savedSession);
         setUser(userData);
+        if (userData.analysis) setAnalysisText(userData.analysis);
       } catch (e) {
         localStorage.removeItem('planner_current_session');
       }
@@ -54,9 +57,9 @@ function App() {
         try {
             const loadedEvents = await storageService.loadEvents(user.username);
             setEvents(loadedEvents);
+            // Analysis is loaded during login, but if we wanted to reload it specifically we could
         } catch (error) {
             console.error("Load error:", error);
-            // Don't clear events on error, keep empty array
         } finally {
             setIsDataLoaded(true);
             setLoadingData(false);
@@ -66,11 +69,12 @@ function App() {
       fetchData();
     } else {
       setEvents([]);
+      setAnalysisText('');
       setIsDataLoaded(false);
     }
   }, [user]);
 
-  // Save events whenever they change (and user exists AND data is loaded)
+  // Save events whenever they change
   useEffect(() => {
     if (user && isDataLoaded && !loadingData) {
       const saveData = async () => {
@@ -84,11 +88,27 @@ function App() {
         }
       };
       
-      // Debounce slightly to prevent too many API calls
       const timeoutId = setTimeout(saveData, 500);
       return () => clearTimeout(timeoutId);
     }
   }, [events, user, isDataLoaded, loadingData]);
+
+  // Save Analysis with debounce
+  useEffect(() => {
+      if (user && isDataLoaded) {
+          const timeoutId = setTimeout(async () => {
+              if (analysisText !== user.analysis) {
+                  setIsSavingAnalysis(true);
+                  await storageService.saveAnalysis(user.username, analysisText);
+                  setIsSavingAnalysis(false);
+                  // Update local user object to reflect saved state
+                  setUser(prev => prev ? { ...prev, analysis: analysisText } : null);
+              }
+          }, 1500); // Auto-save after 1.5s of no typing
+
+          return () => clearTimeout(timeoutId);
+      }
+  }, [analysisText, user, isDataLoaded]);
 
   // --- Handlers ---
 
@@ -101,6 +121,7 @@ function App() {
     setIsDataLoaded(false);
     
     setUser(userData);
+    setAnalysisText(userData.analysis || '');
     localStorage.setItem('planner_current_session', JSON.stringify(userData));
   };
 
@@ -108,6 +129,7 @@ function App() {
     localStorage.removeItem('planner_current_session');
     setIsDataLoaded(false);
     setEvents([]);
+    setAnalysisText('');
     setIsAddingEvent(false);
     setEditingEvent(null);
     setUser(null);
@@ -130,7 +152,6 @@ function App() {
     setSelectedDate(today);
   };
 
-  // Combined handler for creating AND updating
   const handleSaveEvent = (savedEvent: CourseEvent) => {
     if (editingEvent) {
       setEvents(prev => prev.map(e => e.id === savedEvent.id ? savedEvent : e));
@@ -218,8 +239,8 @@ function App() {
         {/* Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
           
-          {/* Left Column: Calendar */}
-          <div className="lg:col-span-8 w-full">
+          {/* Left Column: Calendar & Analysis */}
+          <div className="lg:col-span-8 w-full space-y-6">
             <CalendarGrid 
               currentDate={currentDate}
               selectedDate={selectedDate}
@@ -228,6 +249,31 @@ function App() {
               onChangeMonth={handleChangeMonth}
               onSetToday={handleSetToday}
             />
+
+            {/* Analysis & Memo Section */}
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-100 p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <Sparkles className="w-5 h-5 text-secondary" />
+                        บันทึกและผลวิเคราะห์ (Memo & Analysis)
+                    </h3>
+                    {isSavingAnalysis ? (
+                        <span className="text-xs text-slate-400 flex items-center gap-1 animate-pulse">
+                            <Save className="w-3 h-3" /> กำลังบันทึก...
+                        </span>
+                    ) : (
+                        <span className="text-xs text-green-600 flex items-center gap-1">
+                             บันทึกแล้ว
+                        </span>
+                    )}
+                </div>
+                <textarea
+                    value={analysisText}
+                    onChange={(e) => setAnalysisText(e.target.value)}
+                    placeholder="เขียนบันทึกช่วยจำ เป้าหมายการเรียน หรือใส่ผลการวิเคราะห์จาก AI ที่นี่..."
+                    className="w-full h-32 p-4 rounded-xl border border-slate-200 bg-slate-50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/10 transition-all outline-none resize-none text-sm leading-relaxed"
+                />
+            </div>
           </div>
 
           {/* Right Column: Side Panel */}
