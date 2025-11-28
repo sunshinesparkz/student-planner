@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { LogIn, User, Lock, Loader2, Cloud } from 'lucide-react';
+import { LogIn, User, Lock, Loader2, Cloud, CloudOff } from 'lucide-react';
+import { supabase } from '../lib/supabaseClient';
 
 interface LoginFormProps {
   onLogin: (username: string, pin: string) => Promise<void>;
@@ -10,6 +11,8 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
   const [pin, setPin] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  
+  const isCloudEnabled = !!supabase;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,13 +24,10 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
     setError('');
     setIsLoading(true);
     
-    // Simulate Cloud Network Delay
-    await new Promise(resolve => setTimeout(resolve, 800));
-    
     try {
       await onLogin(username, pin);
-    } catch (err) {
-      setError('รหัสผ่านไม่ถูกต้อง หรือเกิดข้อผิดพลาดในการเชื่อมต่อ');
+    } catch (err: any) {
+      setError(err.message || 'รหัสผ่านไม่ถูกต้อง หรือเกิดข้อผิดพลาด');
     } finally {
       setIsLoading(false);
     }
@@ -42,13 +42,20 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-secondary/10 rounded-full -ml-12 -mb-12 blur-xl pointer-events-none"></div>
 
         <div className="text-center mb-8 relative z-10">
-          <div className="bg-white p-3 rounded-full shadow-lg w-20 h-20 flex items-center justify-center mx-auto mb-4 border border-slate-100">
-            <div className="bg-gradient-to-tr from-primary to-purple-600 w-full h-full rounded-full flex items-center justify-center">
+          <div className="bg-white p-3 rounded-full shadow-lg w-20 h-20 flex items-center justify-center mx-auto mb-4 border border-slate-100 relative">
+            <div className={`bg-gradient-to-tr ${isCloudEnabled ? 'from-primary to-purple-600' : 'from-slate-400 to-slate-600'} w-full h-full rounded-full flex items-center justify-center`}>
                 <Cloud className="w-10 h-10 text-white" />
             </div>
+            {!isCloudEnabled && (
+                <div className="absolute -bottom-1 -right-1 bg-yellow-400 text-slate-900 text-[10px] font-bold px-2 py-0.5 rounded-full border border-white shadow-sm flex items-center gap-1">
+                    <CloudOff className="w-3 h-3" /> Local
+                </div>
+            )}
           </div>
           <h1 className="text-2xl font-bold text-slate-800">Student Planner</h1>
-          <p className="text-slate-500 mt-2 text-sm">ระบบจัดการการเรียนอัจฉริยะ<br/>พร้อมระบบ Cloud Sync</p>
+          <p className="text-slate-500 mt-2 text-sm">
+            {isCloudEnabled ? 'ระบบจัดการการเรียนออนไลน์' : 'โหมดใช้งานแบบออฟไลน์ (Local)'}
+          </p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
@@ -90,17 +97,25 @@ const LoginForm: React.FC<LoginFormProps> = ({ onLogin }) => {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full py-3.5 rounded-xl bg-gradient-to-r from-primary to-purple-600 text-white font-semibold hover:opacity-90 transition-all shadow-lg shadow-primary/30 flex items-center justify-center gap-2 active:scale-[0.98]"
+            className={`w-full py-3.5 rounded-xl text-white font-semibold hover:opacity-90 transition-all shadow-lg flex items-center justify-center gap-2 active:scale-[0.98] ${
+                isCloudEnabled 
+                ? 'bg-gradient-to-r from-primary to-purple-600 shadow-primary/30' 
+                : 'bg-slate-700 shadow-slate-700/30'
+            }`}
           >
             {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <LogIn className="w-5 h-5" />}
-            เข้าสู่ระบบ
+            {isCloudEnabled ? 'เข้าสู่ระบบ Cloud' : 'เข้าสู่ระบบ (Offline)'}
           </button>
         </form>
         
         <div className="mt-8 pt-6 border-t border-slate-100 text-center">
+          {!isCloudEnabled && (
+             <p className="text-xs text-orange-500 mb-2 font-medium">
+               ⚠️ ยังไม่ได้เชื่อมต่อ Database ข้อมูลจะถูกเก็บแค่ในเครื่องนี้
+             </p>
+          )}
           <p className="text-xs text-slate-400">
-            * ระบบจะสร้างบัญชีใหม่อัตโนมัติหากไม่พบผู้ใช้นี้<br/>
-            ข้อมูลของคุณจะถูกเก็บแยกอย่างปลอดภัย
+            * ระบบจะสร้างบัญชีใหม่อัตโนมัติหากไม่พบผู้ใช้นี้
           </p>
         </div>
       </div>

@@ -1,11 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { addMonths, format, parseISO } from 'date-fns';
+import { addMonths, format } from 'date-fns';
 import { CourseEvent, User } from './types';
 import CalendarGrid from './components/CalendarGrid';
 import EventList from './components/EventList';
 import EventForm from './components/EventForm';
 import LoginForm from './components/LoginForm';
-import { LogOut, User as UserIcon } from 'lucide-react';
+import { LogOut, Cloud, WifiOff } from 'lucide-react';
+import { storageService } from './lib/storage';
+import { supabase } from './lib/supabaseClient';
 
 function App() {
   // --- Auth State ---
@@ -24,6 +26,9 @@ function App() {
   
   // New state to prevent overwriting data before it's loaded
   const [isDataLoaded, setIsDataLoaded] = useState(false);
+  
+  // Check if we are in cloud mode
+  const isCloudMode = !!supabase;
 
   // --- Auth & Data Loading Effects ---
   
@@ -34,7 +39,6 @@ function App() {
       try {
         const userData = JSON.parse(savedSession);
         setUser(userData);
-        // Note: We don't set isDataLoaded here, we let the loading effect handle it
       } catch (e) {
         localStorage.removeItem('planner_current_session');
       }
@@ -44,28 +48,22 @@ function App() {
   // Load events whenever user changes
   useEffect(() => {
     if (user) {
-      setLoadingData(true);
-      // Important: Ensure we don't save empty state while loading
-      setIsDataLoaded(false);
-
-      // Simulate fetching from cloud
-      setTimeout(() => {
-        const storageKey = `planner_data_${user.username}`;
-        const savedEvents = localStorage.getItem(storageKey);
-        
-        let loadedEvents: CourseEvent[] = [];
-        if (savedEvents) {
-          try {
-            loadedEvents = JSON.parse(savedEvents);
-          } catch (e) {
-            console.error("Failed to parse events", e);
-          }
+      const fetchData = async () => {
+        setLoadingData(true);
+        setIsDataLoaded(false);
+        try {
+            const loadedEvents = await storageService.loadEvents(user.username);
+            setEvents(loadedEvents);
+        } catch (error) {
+            console.error("Load error:", error);
+            // Don't clear events on error, keep empty array
+        } finally {
+            setIsDataLoaded(true);
+            setLoadingData(false);
         }
-        
-        setEvents(loadedEvents);
-        setIsDataLoaded(true); // Allow saving now
-        setLoadingData(false);
-      }, 500); // Slightly longer delay to ensure UI shows loading state
+      };
+      
+      fetchData();
     } else {
       setEvents([]);
       setIsDataLoaded(false);
@@ -75,38 +73,30 @@ function App() {
   // Save events whenever they change (and user exists AND data is loaded)
   useEffect(() => {
     if (user && isDataLoaded && !loadingData) {
-      const storageKey = `planner_data_${user.username}`;
-      try {
-        localStorage.setItem(storageKey, JSON.stringify(events));
-      } catch (e) {
-        console.error("Storage error:", e);
-        if (e instanceof DOMException && e.name === 'QuotaExceededError') {
-           alert('Cloud Storage จำลองเต็ม! กรุณาลบไฟล์แนบขนาดใหญ่ออก');
+      const saveData = async () => {
+        try {
+            await storageService.saveEvents(user.username, events);
+        } catch (e: any) {
+             console.error("Save error:", e);
+             if (e.message?.includes('quota')) {
+                 alert('พื้นที่จัดเก็บเต็ม! กรุณาลบไฟล์แนบขนาดใหญ่ออก');
+             }
         }
-      }
+      };
+      
+      // Debounce slightly to prevent too many API calls
+      const timeoutId = setTimeout(saveData, 500);
+      return () => clearTimeout(timeoutId);
     }
   }, [events, user, isDataLoaded, loadingData]);
 
   // --- Handlers ---
 
   const handleLogin = async (username: string, pin: string) => {
-    // "Simulate" Cloud Auth
-    const authKey = `planner_auth_${username}`;
-    const storedPin = localStorage.getItem(authKey);
-
-    if (storedPin) {
-      // Existing user: Check PIN
-      if (storedPin !== pin) {
-        throw new Error('Invalid credentials');
-      }
-    } else {
-      // New user: Register (Save PIN)
-      localStorage.setItem(authKey, pin);
-    }
-
-    const userData: User = { username, lastLogin: new Date().toISOString() };
+    // Call storage service for login (Cloud or Local)
+    const userData = await storageService.login(username, pin);
     
-    // Critical: Reset state before setting user to prevent data leak/overwrite
+    // Critical: Reset state before setting user
     setEvents([]);
     setIsDataLoaded(false);
     
@@ -115,10 +105,7 @@ function App() {
   };
 
   const handleLogout = () => {
-    // Clear session
     localStorage.removeItem('planner_current_session');
-    
-    // Reset state
     setIsDataLoaded(false);
     setEvents([]);
     setIsAddingEvent(false);
@@ -146,14 +133,10 @@ function App() {
   // Combined handler for creating AND updating
   const handleSaveEvent = (savedEvent: CourseEvent) => {
     if (editingEvent) {
-      // Update existing
       setEvents(prev => prev.map(e => e.id === savedEvent.id ? savedEvent : e));
     } else {
-      // Add new
       setEvents(prev => [...prev, savedEvent]);
     }
-    
-    // Reset form state
     setIsAddingEvent(false);
     setEditingEvent(null);
   };
@@ -193,7 +176,18 @@ function App() {
             <h1 className="text-3xl font-bold text-slate-800 bg-clip-text text-transparent bg-gradient-to-r from-primary to-secondary">
               Student Planner
             </h1>
-            <p className="text-slate-500">จัดการตารางเรียนและกิจกรรมของคุณ</p>
+            <p className="text-slate-500 flex items-center gap-2">
+                จัดการตารางเรียนและกิจกรรมของคุณ
+                {isCloudMode ? (
+                    <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full border border-green-200 flex items-center gap-1">
+                        <Cloud className="w-3 h-3" /> Cloud Sync
+                    </span>
+                ) : (
+                    <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full border border-orange-200 flex items-center gap-1">
+                        <WifiOff className="w-3 h-3" /> Local Mode
+                    </span>
+                )}
+            </p>
           </div>
           
           <div className="flex items-center gap-4">
@@ -242,7 +236,9 @@ function App() {
               {loadingData ? (
                  <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-3">
                     <div className="w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full animate-spin"></div>
-                    <p className="text-sm">กำลังโหลดข้อมูล...</p>
+                    <p className="text-sm">
+                        {isCloudMode ? 'กำลังดึงข้อมูลจาก Cloud...' : 'กำลังโหลดข้อมูล...'}
+                    </p>
                  </div>
               ) : showForm ? (
                 <EventForm 

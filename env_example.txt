@@ -1,8 +1,10 @@
 # ตัวอย่าง Environment Variables สำหรับโปรเจกต์ Vite
 # เวลาใช้งานจริง ให้สร้างไฟล์ .env และคัดลอกค่าเหล่านี้ไปใส่ (ไม่ต้อง commit ไฟล์ .env จริง)
 
-# ชื่อแอปพลิเคชัน (ถ้าต้องการใช้ในโค้ด)
+# ชื่อแอปพลิเคชัน
 VITE_APP_TITLE=Student Planner
 
-# หากมีการเชื่อมต่อ API ในอนาคต
-VITE_API_BASE_URL=https://api.example.com
+# การตั้งค่า Supabase (สำหรับ Cloud Database)
+# สมัครที่ https://supabase.com -> Create Project -> Settings -> API
+VITE_SUPABASE_URL=https://your-project-id.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-key-here
