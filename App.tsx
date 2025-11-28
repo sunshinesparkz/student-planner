@@ -5,6 +5,7 @@ import CalendarGrid from './components/CalendarGrid';
 import EventList from './components/EventList';
 import EventForm from './components/EventForm';
 import LoginForm from './components/LoginForm';
+import AIChatWindow from './components/AIChatWindow';
 import { LogOut, Cloud, WifiOff, Sparkles, Save } from 'lucide-react';
 import { storageService } from './lib/storage';
 import { supabase } from './lib/supabaseClient';
@@ -307,8 +308,10 @@ function App() {
               )}
             </div>
           </div>
-
         </div>
+        
+        {/* AI Chat Window */}
+        <AIChatWindow username={user.username} events={events} />
       </div>
     </div>
   );
